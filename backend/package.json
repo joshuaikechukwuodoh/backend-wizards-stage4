@@ -1,0 +1,30 @@
+{
+  "name": "backend-wizards-stage2",
+  "module": "src/server.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10"
+  },
+  "peerDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "dev": "bun run src/server.ts",
+    "start": "bun run src/server.ts",
+    "seed": "bun run src/seed.ts",
+    "db:push": "drizzle-kit push"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.14",
+    "jose": "^6.2.2",
+    "pg": "^8.20.0",
+    "postgres": "^3.4.9",
+    "uuidv7": "^1.2.1"
+  }
+}

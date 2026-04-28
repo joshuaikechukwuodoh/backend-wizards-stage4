@@ -1,0 +1,233 @@
+import { Hono } from 'hono';
+import { serveStatic } from 'hono/bun';
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
+import crypto from 'node:crypto';
+
+const app = new Hono();
+const BACKEND_URL = 'http://localhost:3000/api/v1';
+
+// CSRF Protection Middleware
+app.use('*', async (c, next) => {
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(c.req.method)) {
+    const csrfCookie = getCookie(c, 'csrf_token');
+    const csrfHeader = c.req.header('X-CSRF-Token');
+    if (!csrfCookie || csrfCookie !== csrfHeader) {
+      return c.json({ status: 'error', message: 'CSRF token mismatch' }, 403);
+    }
+  }
+  await next();
+});
+
+// Proxy helper for backend calls
+async function proxyToBackend(c: any, path: string, method: string = 'GET', body: any = null) {
+  const accessToken = getCookie(c, 'access_token');
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  };
+  if (accessToken) {
+    headers['Authorization'] = `Bearer ${accessToken}`;
+  }
+
+  try {
+    const res = await fetch(`${BACKEND_URL}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : null,
+    });
+    
+    // Handle unauthorized - try refresh
+    if (res.status === 401) {
+       const refreshToken = getCookie(c, 'refresh_token');
+       if (refreshToken) {
+          const refreshRes = await fetch(`${BACKEND_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken })
+          });
+          if (refreshRes.ok) {
+            const refreshData = await refreshRes.json() as any;
+            setCookie(c, 'access_token', refreshData.access_token, { httpOnly: true, path: '/', maxAge: 900 });
+            // Retry original
+            headers['Authorization'] = `Bearer ${refreshData.access_token}`;
+            const retryRes = await fetch(`${BACKEND_URL}${path}`, { method, headers, body: body ? JSON.stringify(body) : null });
+            return retryRes;
+          }
+       }
+    }
+    return res;
+  } catch (err) {
+    console.error('Proxy error:', err);
+    return new Response(JSON.stringify({ status: 'error', message: 'Backend unreachable' }), { status: 502 });
+  }
+}
+
+// Internal Proxy Routes for Client-side
+app.get('/api/me', async (c) => {
+  const res = await proxyToBackend(c, '/auth/me');
+  return c.json(await res.json(), res.status as any);
+});
+
+app.get('/api/profiles', async (c) => {
+  const query = new URL(c.req.url).search;
+  const res = await proxyToBackend(c, `/profiles${query}`);
+  return c.json(await res.json(), res.status as any);
+});
+
+app.get('/api/profiles/search', async (c) => {
+  const query = new URL(c.req.url).search;
+  const res = await proxyToBackend(c, `/profiles/search${query}`);
+  return c.json(await res.json(), res.status as any);
+});
+
+app.get('/api/profiles/export', async (c) => {
+  const res = await proxyToBackend(c, '/profiles/export');
+  if (!res.ok) return c.json(await res.json(), res.status as any);
+  
+  c.header('Content-Type', 'text/csv');
+  c.header('Content-Disposition', res.headers.get('Content-Disposition') || 'attachment; filename=export.csv');
+  return c.body(await res.text());
+});
+
+// Serve static files
+app.use('/static/*', serveStatic({ root: './' }));
+
+app.get('/', (c) => {
+  const accessToken = getCookie(c, 'access_token');
+  if (accessToken) return c.redirect('/dashboard');
+  
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8"><title>Insighta Labs+ | Login</title>
+        <link rel="stylesheet" href="/static/public/style.css">
+    </head>
+    <body class="login-page">
+        <div class="login-card">
+            <h1>Insighta Labs+</h1>
+            <p>Secure Access & Profile Intelligence</p>
+            <a href="http://localhost:3000/api/v1/auth/github?redirect_to=http://localhost:4000/auth/callback" class="github-btn">
+                Login with GitHub
+            </a>
+        </div>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/auth/callback', (c) => {
+  const accessToken = c.req.query('access_token');
+  const refreshToken = c.req.query('refresh_token');
+
+  if (accessToken && refreshToken) {
+    setCookie(c, 'access_token', accessToken, { httpOnly: true, path: '/', maxAge: 900 });
+    setCookie(c, 'refresh_token', refreshToken, { httpOnly: true, path: '/', maxAge: 604800 });
+  }
+
+  const csrfToken = crypto.randomBytes(32).toString('hex');
+  setCookie(c, 'csrf_token', csrfToken, { path: '/', maxAge: 604800 });
+
+  return c.redirect('/dashboard');
+});
+
+app.get('/dashboard', (c) => {
+  const accessToken = getCookie(c, 'access_token');
+  if (!accessToken) return c.redirect('/');
+
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8"><title>Insighta Labs+ | Dashboard</title>
+        <link rel="stylesheet" href="/static/public/style.css">
+    </head>
+    <body>
+        <nav>
+            <div class="logo">Insighta Labs+</div>
+            <div class="nav-links">
+                <span id="user-info">Loading...</span>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+        </nav>
+        <main>
+            <section class="controls">
+                <input type="text" id="search-input" placeholder="Search profiles...">
+                <button onclick="loadProfiles(1)">Search</button>
+                <button id="export-btn" onclick="exportData()" style="display:none;">Export CSV</button>
+            </section>
+            <div id="results">
+                <table id="profile-table">
+                    <thead><tr><th>Name</th><th>Age</th><th>Gender</th><th>Country</th></tr></thead>
+                    <tbody id="profile-body"></tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button id="prev-btn" onclick="changePage(-1)">Previous</button>
+                <span id="page-info">Page 1</span>
+                <button id="next-btn" onclick="changePage(1)">Next</button>
+            </div>
+        </main>
+        <script>
+            let currentPage = 1;
+            const csrfToken = "${getCookie(c, 'csrf_token')}";
+
+            async function fetchUser() {
+                const res = await fetch('/api/me');
+                const data = await res.json();
+                if (data.status === 'success') {
+                    const user = data.user;
+                    document.getElementById('user-info').textContent = \`Logged in as \${user.username} (\${user.role})\`;
+                    if (user.role === 'admin') document.getElementById('export-btn').style.display = 'inline-block';
+                } else {
+                    window.location.href = '/';
+                }
+            }
+
+            async function loadProfiles(page = 1) {
+                currentPage = page;
+                const search = document.getElementById('search-input').value;
+                const url = search 
+                    ? \`/api/profiles/search?q=\${encodeURIComponent(search)}&page=\${page}\`
+                    : \`/api/profiles?page=\${page}\`;
+                
+                const res = await fetch(url);
+                const data = await res.json();
+                
+                const body = document.getElementById('profile-body');
+                body.innerHTML = '';
+                data.data.forEach(p => {
+                    const row = \`<tr><td>\${p.name}</td><td>\${p.age}</td><td>\${p.gender}</td><td>\${p.country_name}</td></tr>\`;
+                    body.innerHTML += row;
+                });
+                document.getElementById('page-info').textContent = \`Page \${data.metadata.page}\`;
+            }
+
+            function changePage(delta) {
+                loadProfiles(currentPage + delta);
+            }
+
+            async function exportData() {
+                window.location.href = '/api/profiles/export';
+            }
+
+            async function logout() {
+                await fetch('/logout', { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } });
+                window.location.href = '/';
+            }
+
+            fetchUser().then(() => loadProfiles());
+        </script>
+    </body>
+    </html>
+  `);
+});
+
+app.post('/logout', (c) => {
+  deleteCookie(c, 'access_token');
+  deleteCookie(c, 'refresh_token');
+  deleteCookie(c, 'csrf_token');
+  return c.json({ status: 'success' });
+});
+
+export default { port: 4000, fetch: app.fetch };
