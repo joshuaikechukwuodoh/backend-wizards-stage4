@@ -1,7 +1,6 @@
 {
   "name": "backend-wizards-stage2",
   "module": "src/server.ts",
-  "type": "module",
   "private": true,
   "devDependencies": {
     "@types/bun": "latest",
