@@ -9,6 +9,9 @@ import { authMiddleware } from "./middleware/auth";
 import { requireRole } from "./middleware/rbac";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { loggerMiddleware } from "./middleware/logger";
+import { db } from "./db";
+import { users } from "./db/schema";
+import { eq } from "drizzle-orm";
 import type { HonoEnv } from "./types";
 
 const app = new Hono<HonoEnv>();
@@ -50,11 +53,22 @@ app.route("/api/v1/auth", authRouter);
 
 // ── User Profile (Me) ─────────────────────────────────────────────────────────
 // Grader expects /api/users/me
-app.get("/api/users/me", authMiddleware, (c) => {
-  // Reuse the /auth/me logic
-  return authRouter.fetch(new Request(`${new URL(c.req.url).origin}/auth/me`, {
-    headers: c.req.header()
-  }));
+app.get("/api/users/me", authMiddleware, async (c) => {
+  const user = c.get("user");
+  const userRows = await db.select().from(users).where(eq(users.id, user.sub));
+  const userData = userRows[0];
+  if (!userData) return c.json({ status: "error", message: "User not found" }, 404);
+
+  return c.json({
+    status: "success",
+    user: {
+      id: userData.id,
+      username: userData.github_username,
+      email: userData.github_email || null,
+      avatar: userData.github_avatar || null,
+      role: userData.role,
+    },
+  });
 });
 
 // ── v1 Protected profile routes ───────────────────────────────────────────────
