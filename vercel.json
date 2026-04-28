@@ -1,0 +1,30 @@
+{
+  "builds": [
+    {
+      "src": "backend/src/server.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "web/src/index.ts",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/src/server.ts"
+    },
+    {
+      "src": "/auth/(.*)",
+      "dest": "backend/src/server.ts"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "web/public/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "web/src/index.ts"
+    }
+  ]
+}

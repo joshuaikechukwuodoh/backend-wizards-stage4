@@ -4,8 +4,11 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import crypto from 'node:crypto';
 
 const app = new Hono();
-const BACKEND_URL = process.env.API_URL || 'http://localhost:3000/api/v1';
-const WEB_URL = process.env.WEB_URL || 'http://localhost:4000';
+
+// Dynamic URL detection
+const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
+const BACKEND_URL = process.env.API_URL || (isVercel ? '/api/v1' : 'http://localhost:3000/api/v1');
+const WEB_URL = process.env.WEB_URL || (isVercel ? '' : 'http://localhost:4000');
 
 // CSRF Protection Middleware
 app.use('*', async (c, next) => {
