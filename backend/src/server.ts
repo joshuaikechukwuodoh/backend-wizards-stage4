@@ -22,9 +22,10 @@ app.use("*", cors({
 app.use("*", loggerMiddleware);
 app.use("*", rateLimitMiddleware(100, 60_000));
 
-// Ignore favicon requests to keep logs clean
+// Ignore favicon and logo requests to keep logs clean
 app.get("/favicon.ico", (c) => c.body(null, 204));
 app.get("/favicon.png", (c) => c.body(null, 204));
+app.get("/logo.png", (c) => c.body(null, 204));
 
 // Root
 app.get("/", (c) => c.json({
