@@ -25,7 +25,7 @@ app.use("*", cors({
 app.use("*", loggerMiddleware);
 
 // 2. Rate limiting - apply to auth first
-app.use("/auth/*", rateLimitMiddleware(10, 60_000));
+app.use("/auth/*", rateLimitMiddleware(20, 60_000));
 app.use("/api/v1/auth/*", rateLimitMiddleware(10, 60_000));
 app.use("/api/*", rateLimitMiddleware(100, 60_000));
 
