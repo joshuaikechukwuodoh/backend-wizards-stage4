@@ -1,4 +1,4 @@
-const API_URL = "https://backend-wizards-stage3.vercel.app";
+const API_URL = "http://localhost:3000"; // For deployment, change this to your production API URL
 
 const Login = () => {
   const handleLogin = () => {

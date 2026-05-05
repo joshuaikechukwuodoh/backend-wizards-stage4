@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 
-const API_URL = "https://backend-wizards-stage3.vercel.app";
+const API_URL = "http://localhost:3000"; // For deployment, change this to your production API URL
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
