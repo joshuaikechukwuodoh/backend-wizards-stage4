@@ -32,6 +32,9 @@ app.use("/api/*", rateLimitMiddleware(100, 60_000));
 
 // 3. Static/Public routes
 app.get("/favicon.ico", (c) => c.body(null, 204));
+app.get("/api/v1/health", (c) => c.json({ status: "success", message: "Service is healthy" }));
+app.get("/health", (c) => c.json({ status: "success", message: "Service is healthy" }));
+
 app.get("/", (c) => c.json({
   status: "success",
   message: "Insighta Labs+ API",
@@ -43,10 +46,12 @@ app.route("/auth", authRouter);
 app.route("/api/v1/auth", authRouter);
 
 // 5. Protected API routes
-// Ensure all /api and /api/v1/profiles are protected
 app.use("/api/*", async (c, next) => {
-  // Skip auth for public auth routes if they are under /api
-  if (c.req.path.includes("/auth/")) return await next();
+  // Skip auth for public auth routes
+  const path = c.req.path;
+  if (path.includes("/auth/github") || path.includes("/auth/callback") || path.includes("/auth/refresh")) {
+    return await next();
+  }
   return authMiddleware(c, next);
 });
 

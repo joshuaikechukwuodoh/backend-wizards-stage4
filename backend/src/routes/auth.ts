@@ -21,12 +21,15 @@ authRouter.get("/github", async (c: Context<HonoEnv>) => {
   // Safety: Detect if we are on production and GITHUB_CALLBACK_URL is still localhost
   let authRedirectUri = process.env.GITHUB_CALLBACK_URL!;
   const host = c.req.header("host");
+  const protocol = (host?.includes("localhost")) ? "http" : "https";
+  
   if (host && !host.includes("localhost") && authRedirectUri.includes("localhost")) {
-    const protocol = (host.includes("vercel.app") || c.req.header("x-forwarded-proto") === "https") ? "https" : "http";
-    authRedirectUri = `${protocol}://${host}/auth/callback`; // Default to /auth/callback
+    // If request path contains /api/v1, preserve it in the callback
+    const isApiV1 = c.req.path.includes("/api/v1");
+    authRedirectUri = `${protocol}://${host}${isApiV1 ? "/api/v1" : ""}/auth/callback`;
   }
 
-  const cookieOptions = { httpOnly: true, path: "/", maxAge: 600, sameSite: "Lax" as const, secure: true };
+  const cookieOptions = { httpOnly: true, path: "/", maxAge: 600, sameSite: "Lax" as const, secure: protocol === "https" };
   setCookie(c, "oauth_state", state, cookieOptions);
   setCookie(c, "oauth_verifier", verifier, cookieOptions);
   setCookie(c, "oauth_redirect", redirectTo, cookieOptions);
@@ -59,13 +62,19 @@ async function handleCallback(c: Context<HonoEnv>) {
 
   // STRICT VALIDATION for grader
   if (!code) {
-    return c.json({ status: "error", message: "Missing code parameter" }, 400);
+    return c.json({ status: "error", message: "Missing code parameter from GitHub" }, 400);
   }
   if (!state) {
-    return c.json({ status: "error", message: "Missing state parameter" }, 400);
+    return c.json({ status: "error", message: "Missing state parameter from GitHub" }, 400);
   }
-  if (state !== savedState || !verifier || !authRedirectUri) {
-    return c.json({ status: "error", message: "Invalid or expired state" }, 401);
+  if (state !== savedState) {
+    return c.json({ status: "error", message: "State mismatch: possible CSRF or expired session", expected: savedState, received: state }, 401);
+  }
+  if (!verifier) {
+    return c.json({ status: "error", message: "Missing code verifier (cookie might be blocked or expired)" }, 401);
+  }
+  if (!authRedirectUri) {
+    return c.json({ status: "error", message: "Missing callback URI (cookie might be blocked or expired)" }, 401);
   }
 
   try {
@@ -213,12 +222,19 @@ authRouter.post("/logout", async (c: Context<HonoEnv>) => {
 
 // GET /api/v1/auth/me
 authRouter.get("/me", async (c: Context<HonoEnv>) => {
+  let token = "";
   const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return c.json({ status: "error", message: "Unauthorized" }, 401);
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    token = getCookie(c, "access_token") || "";
   }
 
-  const payload = await verifyToken(authHeader.slice(7));
+  if (!token) {
+    return c.json({ status: "error", message: "Unauthorized: missing token" }, 401);
+  }
+
+  const payload = await verifyToken(token);
   if (!payload || payload.type !== "access") {
     return c.json({ status: "error", message: "Invalid or expired token" }, 401);
   }

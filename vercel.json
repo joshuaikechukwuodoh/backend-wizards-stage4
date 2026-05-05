@@ -12,9 +12,11 @@
   ],
   "routes": [
     {
-      "src": "/static/(.*)",
-      "dest": "web/public/$1",
-      "continue": true
+      "handle": "filesystem"
+    },
+    {
+      "src": "/favicon.ico",
+      "dest": "backend/src/server.ts"
     },
     {
       "src": "/api/v1/(.*)",
