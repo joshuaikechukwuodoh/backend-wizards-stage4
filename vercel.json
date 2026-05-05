@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "builds": [
     {
       "src": "backend/src/server.ts",
@@ -11,6 +12,11 @@
   ],
   "routes": [
     {
+      "src": "/static/(.*)",
+      "dest": "web/public/$1",
+      "continue": true
+    },
+    {
       "src": "/api/v1/(.*)",
       "dest": "backend/src/server.ts"
     },
@@ -19,12 +25,14 @@
       "dest": "backend/src/server.ts"
     },
     {
-      "src": "/static/(.*)",
-      "dest": "web/public/$1"
+      "src": "/api/(.*)",
+      "dest": "web/src/index.ts"
     },
     {
       "src": "/(.*)",
       "dest": "web/src/index.ts"
     }
-  ]
+  ],
+  "cleanUrls": true,
+  "trailingSlash": false
 }
