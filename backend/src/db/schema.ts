@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, integer, real, timestamp, text } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, integer, real, timestamp, text, index } from "drizzle-orm/pg-core";
 
 export const profiles = pgTable("profiles", {
   id: uuid("id").primaryKey(),
@@ -11,6 +11,15 @@ export const profiles = pgTable("profiles", {
   country_name: varchar("country_name"),
   country_probability: real("country_probability"),
   created_at: timestamp("created_at").defaultNow()
+}, (table) => {
+  return {
+    ageIdx: index("idx_profiles_age").on(table.age),
+    genderIdx: index("idx_profiles_gender").on(table.gender),
+    countryIdx: index("idx_profiles_country").on(table.country_id),
+    ageGroupIdx: index("idx_profiles_age_group").on(table.age_group),
+    genderAgeIdx: index("idx_profiles_gender_age").on(table.gender, table.age),
+    countryGenderIdx: index("idx_profiles_country_gender").on(table.country_id, table.gender),
+  };
 });
 
 export const users = pgTable("users", {

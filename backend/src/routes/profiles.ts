@@ -29,30 +29,42 @@ export async function getProfiles(c: Context<HonoEnv>, filters?: Record<string, 
 
     // Normalise filter params and build cache key
     const filterParams: Record<string, unknown> = {};
-    const filterKeys = ["gender", "age_group", "country_id", "min_age", "max_age", "min_gender_probability", "min_country_probability", "sort_by", "order", "page", "limit"];
+    const filterKeys = ["gender", "age_group", "country_id", "min_age", "max_age", "min_gender_probability", "min_country_probability"];
+    const sortKeys = ["sort_by", "order", "page", "limit"];
+    
     for (const k of filterKeys) {
       if (q[k] !== undefined && q[k] !== "") filterParams[k] = q[k];
     }
-    const normalized = normalizeFilters(filterParams);
-    const cacheKey = filtersToCacheKey("profiles", normalized);
+    
+    const normalizedFilters = normalizeFilters(filterParams);
+    
+    // Cache key for the data (includes sort/pagination)
+    const dataParams = { ...normalizedFilters };
+    for (const k of sortKeys) {
+      if (q[k] !== undefined && q[k] !== "") dataParams[k] = q[k];
+    }
+    const dataCacheKey = filtersToCacheKey("profiles:data", dataParams);
 
-    const cached = getCached(cacheKey);
-    if (cached) return c.json(cached);
+    // Cache key for the total count (only filters matter)
+    const countCacheKey = filtersToCacheKey("profiles:count", normalizedFilters);
+
+    const cachedData = getCached(dataCacheKey);
+    if (cachedData) return c.json(cachedData);
 
     // Build WHERE conditions
     let conditions = [];
-    if (normalized.gender) conditions.push(eq(profiles.gender, String(normalized.gender)));
-    if (normalized.age_group) conditions.push(eq(profiles.age_group, String(normalized.age_group)));
-    if (normalized.country_id) conditions.push(eq(profiles.country_id, String(normalized.country_id).toUpperCase()));
-    if (normalized.min_age) conditions.push(gte(profiles.age, Number(normalized.min_age)));
-    if (normalized.max_age) conditions.push(lte(profiles.age, Number(normalized.max_age)));
-    if (normalized.min_gender_probability) conditions.push(gte(profiles.gender_probability, Number(normalized.min_gender_probability)));
-    if (normalized.min_country_probability) conditions.push(gte(profiles.country_probability, Number(normalized.min_country_probability)));
+    if (normalizedFilters.gender) conditions.push(eq(profiles.gender, String(normalizedFilters.gender)));
+    if (normalizedFilters.age_group) conditions.push(eq(profiles.age_group, String(normalizedFilters.age_group)));
+    if (normalizedFilters.country_id) conditions.push(eq(profiles.country_id, String(normalizedFilters.country_id).toUpperCase()));
+    if (normalizedFilters.min_age) conditions.push(gte(profiles.age, Number(normalizedFilters.min_age)));
+    if (normalizedFilters.max_age) conditions.push(lte(profiles.age, Number(normalizedFilters.max_age)));
+    if (normalizedFilters.min_gender_probability) conditions.push(gte(profiles.gender_probability, Number(normalizedFilters.min_gender_probability)));
+    if (normalizedFilters.min_country_probability) conditions.push(gte(profiles.country_probability, Number(normalizedFilters.min_country_probability)));
 
     const whereClause = conditions.length ? and(...conditions) : undefined;
 
-    const sortBy = String(normalized.sort_by || "created_at");
-    const order = String(normalized.order || "desc") === "asc" ? asc : desc;
+    const sortBy = String(q.sort_by || "created_at");
+    const order = String(q.order || "desc") === "asc" ? asc : desc;
     const columnMap: Record<string, any> = {
       age: profiles.age,
       created_at: profiles.created_at,
@@ -61,18 +73,26 @@ export async function getProfiles(c: Context<HonoEnv>, filters?: Record<string, 
     };
     const orderBy = columnMap[sortBy] || profiles.created_at;
 
-    let page = Number(normalized.page || 1);
+    let page = Number(q.page || 1);
     if (page < 1) page = 1;
-    let limit = Math.min(Number(normalized.limit || 10), 50);
+    let limit = Math.min(Number(q.limit || 10), 50);
     if (limit < 1) limit = 10;
     const offset = (page - 1) * limit;
 
-    const [data, totalResult] = await Promise.all([
+    // Execute data query and count query (potentially cached)
+    const [data, totalCount] = await Promise.all([
       db.select().from(profiles).where(whereClause).orderBy(order(orderBy)).limit(limit).offset(offset),
-      db.select({ count: sql<string>`count(*)` }).from(profiles).where(whereClause),
+      (async () => {
+        const cachedCount = getCached(countCacheKey);
+        if (cachedCount !== null) return Number(cachedCount);
+        
+        const countResult = await db.select({ count: sql<string>`count(*)` }).from(profiles).where(whereClause);
+        const count = Number(countResult[0]?.count ?? 0);
+        setCached(countCacheKey, count);
+        return count;
+      })()
     ]);
 
-    const totalCount = Number(totalResult[0]?.count ?? 0);
     const totalPages = Math.ceil(totalCount / limit);
 
     const response = {
@@ -87,7 +107,7 @@ export async function getProfiles(c: Context<HonoEnv>, filters?: Record<string, 
       data,
     };
 
-    setCached(cacheKey, response);
+    setCached(dataCacheKey, response);
     return c.json(response);
   } catch (error: any) {
     console.error("Error fetching profiles:", error);

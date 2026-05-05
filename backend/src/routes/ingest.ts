@@ -117,10 +117,11 @@ export async function ingestCSV(c: Context<HonoEnv>) {
   const flushBatch = async () => {
     if (batch.length === 0) return;
     try {
+      // Use ON CONFLICT DO NOTHING for idempotency as required
       const inserted = await db
         .insert(profiles)
         .values(batch)
-        .onConflictDoNothing()
+        .onConflictDoNothing({ target: profiles.name })
         .returning({ id: profiles.id });
 
       stats.inserted += inserted.length;
@@ -130,7 +131,6 @@ export async function ingestCSV(c: Context<HonoEnv>) {
         stats.reasons.duplicate_name = (stats.reasons.duplicate_name ?? 0) + duplicates;
       }
     } catch (err) {
-      // If the whole batch errors (e.g. DB issue), count all as skipped
       console.error("Batch insert error:", err);
       stats.skipped += batch.length;
       bumpReason(stats.reasons, "insert_error");
@@ -140,16 +140,16 @@ export async function ingestCSV(c: Context<HonoEnv>) {
   };
 
   for await (const line of streamLines(body)) {
-    if (!line.trim()) continue; // skip blank lines
+    if (!line.trim()) continue;
 
     if (!headerParsed) {
       const cols = parseCSVLine(line);
-      if (!cols) {
-        return c.json({ status: "error", message: "Malformed CSV header" }, 400);
-      }
+      if (!cols) return c.json({ status: "error", message: "Malformed CSV header" }, 400);
+      
       cols.forEach((col, idx) => {
         headerMap[col.trim().toLowerCase()] = idx;
       });
+      
       if (headerMap.name === undefined) {
         return c.json({ status: "error", message: "CSV must include a 'name' column" }, 400);
       }
@@ -160,14 +160,7 @@ export async function ingestCSV(c: Context<HonoEnv>) {
     stats.total_rows++;
 
     const fields = parseCSVLine(line);
-    if (!fields) {
-      stats.skipped++;
-      bumpReason(stats.reasons, "malformed_row");
-      continue;
-    }
-
-    const expectedCols = Object.keys(headerMap).length;
-    if (fields.length !== expectedCols) {
+    if (!fields || fields.length !== Object.keys(headerMap).length) {
       stats.skipped++;
       bumpReason(stats.reasons, "malformed_row");
       continue;
@@ -178,34 +171,23 @@ export async function ingestCSV(c: Context<HonoEnv>) {
       return idx !== undefined ? fields[idx]?.trim() ?? "" : "";
     };
 
-    // Required: name
     const name = get("name");
-    if (!name) {
+    const gender = get("gender").toLowerCase();
+    const ageRaw = get("age");
+
+    // Validation
+    if (!name || !gender || !ageRaw) {
       stats.skipped++;
       bumpReason(stats.reasons, "missing_fields");
       continue;
     }
 
-    // Required: gender
-    const gender = get("gender").toLowerCase();
-    if (gender && !VALID_GENDERS.has(gender)) {
+    if (!VALID_GENDERS.has(gender)) {
       stats.skipped++;
       bumpReason(stats.reasons, "invalid_gender");
       continue;
     }
-    if (!gender) {
-      stats.skipped++;
-      bumpReason(stats.reasons, "missing_fields");
-      continue;
-    }
 
-    // Required: age
-    const ageRaw = get("age");
-    if (!ageRaw) {
-      stats.skipped++;
-      bumpReason(stats.reasons, "missing_fields");
-      continue;
-    }
     const age = parseInt(ageRaw, 10);
     if (isNaN(age) || age < 0 || age > 150) {
       stats.skipped++;
@@ -213,7 +195,6 @@ export async function ingestCSV(c: Context<HonoEnv>) {
       continue;
     }
 
-    // Optional: gender_probability
     const gpRaw = get("gender_probability");
     const genderProbability = gpRaw ? parseFloat(gpRaw) : null;
     if (genderProbability !== null && (isNaN(genderProbability) || genderProbability < 0 || genderProbability > 1)) {
@@ -222,7 +203,6 @@ export async function ingestCSV(c: Context<HonoEnv>) {
       continue;
     }
 
-    // Optional: age_group (derive from age if missing or invalid)
     let age_group = get("age_group").toLowerCase();
     if (age_group && !VALID_AGE_GROUPS.has(age_group)) {
       stats.skipped++;
@@ -231,7 +211,6 @@ export async function ingestCSV(c: Context<HonoEnv>) {
     }
     if (!age_group) age_group = deriveAgeGroup(age);
 
-    // Optional: country_id (must be 2 chars if provided)
     const country_id = get("country_id").toUpperCase() || null;
     if (country_id && country_id.length !== 2) {
       stats.skipped++;
@@ -239,10 +218,6 @@ export async function ingestCSV(c: Context<HonoEnv>) {
       continue;
     }
 
-    // Optional: country_name
-    const country_name = get("country_name") || null;
-
-    // Optional: country_probability
     const cpRaw = get("country_probability");
     const country_probability = cpRaw ? parseFloat(cpRaw) : null;
     if (country_probability !== null && (isNaN(country_probability) || country_probability < 0 || country_probability > 1)) {
@@ -259,7 +234,7 @@ export async function ingestCSV(c: Context<HonoEnv>) {
       age,
       age_group,
       country_id,
-      country_name,
+      country_name: get("country_name") || null,
       country_probability,
     });
 
@@ -268,10 +243,7 @@ export async function ingestCSV(c: Context<HonoEnv>) {
     }
   }
 
-  // Flush remaining rows
   await flushBatch();
-
-  // Invalidate the profiles query cache so fresh data is visible immediately
   invalidateProfilesCache();
 
   return c.json({
