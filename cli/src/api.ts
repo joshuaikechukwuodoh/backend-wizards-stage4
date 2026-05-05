@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getCredentials, saveCredentials, clearCredentials } from './config';
 
-const BASE_URL = process.env.INSIGHTA_API_URL || 'http://localhost:3000/api/v1';
+const BASE_URL = process.env.INSIGHTA_API_URL || 'https://backend-wizards-stage3.vercel.app/api/v1';
 
 export const api = axios.create({
   baseURL: BASE_URL,

@@ -1,15 +1,9 @@
-import axios from "axios";
-
-const API_URL = "http://localhost:3000";
+const API_URL = "https://backend-wizards-stage3.vercel.app";
 
 const Login = () => {
-  const handleLogin = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/api/v1/auth/github?source=web`);
-      window.location.href = res.data.auth_url;
-    } catch (err) {
-      alert("Failed to connect to server. Please try again.");
-    }
+  const handleLogin = () => {
+    const redirectTo = encodeURIComponent(window.location.origin + "/auth/success");
+    window.location.href = `${API_URL}/auth/github?redirect_to=${redirectTo}`;
   };
 
   return (

@@ -1,13 +1,13 @@
-import { Hono } from 'hono';
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
-import crypto from 'node:crypto';
+import { Hono } from "hono";
+import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import crypto from "node:crypto";
 
 const app = new Hono();
 
 // Dynamic URL detection
-const isVercel = process.env.VERCEL === '1' || process.env.NODE_ENV === 'production';
-const BACKEND_URL = process.env.API_URL || (isVercel ? '/api/v1' : 'http://localhost:3000/api/v1');
-const WEB_URL = process.env.WEB_URL || (isVercel ? '' : 'http://localhost:4000');
+const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+const BACKEND_URL = process.env.API_URL || (isVercel ? "/api/v1" : "http://localhost:3000/api/v1");
+const WEB_URL = process.env.WEB_URL || (isVercel ? "" : "http://localhost:4000");
 
 // CSRF Protection Middleware
 app.get('/favicon.ico', (c) => c.body(null, 204));
@@ -121,13 +121,13 @@ app.get('/', (c) => {
     <html lang="en">
     <head>
         <meta charset="UTF-8"><title>Insighta Labs+ | Login</title>
-        <link rel="stylesheet" href="/static/public/style.css">
+        <link rel="stylesheet" href="/static/style.css">
     </head>
     <body class="login-page">
         <div class="login-card">
             <h1>Insighta Labs+</h1>
             <p>Secure Access & Profile Intelligence</p>
-            <a href="${BACKEND_URL}/auth/github?redirect_to=${WEB_URL}/auth/callback" class="github-btn">
+            <a href="${BACKEND_URL}/auth/github?redirect_to=${WEB_URL}/auth/web-callback" class="github-btn">
                 Login with GitHub
             </a>
         </div>
@@ -136,7 +136,7 @@ app.get('/', (c) => {
   `);
 });
 
-app.get('/auth/callback', (c) => {
+app.get('/auth/web-callback', (c) => {
   const accessToken = c.req.query('access_token');
   const refreshToken = c.req.query('refresh_token');
 
@@ -160,7 +160,7 @@ app.get('/dashboard', (c) => {
     <html lang="en">
     <head>
         <meta charset="UTF-8"><title>Insighta Labs+ | Dashboard</title>
-        <link rel="stylesheet" href="/static/public/style.css">
+        <link rel="stylesheet" href="/static/style.css">
     </head>
     <body>
         <nav>

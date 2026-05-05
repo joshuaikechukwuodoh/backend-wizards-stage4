@@ -6,11 +6,13 @@ const AuthSuccess = () => {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const role = searchParams.get("role");
-    // Small delay so cookies are set before we navigate
-    setTimeout(() => {
-      navigate("/dashboard");
-    }, 1000);
+    const accessToken = searchParams.get("access_token");
+    const refreshToken = searchParams.get("refresh_token");
+
+    if (accessToken) localStorage.setItem("access_token", accessToken);
+    if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+
+    setTimeout(() => navigate("/dashboard"), 500);
   }, []);
 
   return (

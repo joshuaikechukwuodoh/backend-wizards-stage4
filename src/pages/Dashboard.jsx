@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useAuth } from "../hooks/useAuth";
 
-const API_URL = "https://insighta-labs-backend-production.up.railway.app";
+const API_URL = "https://backend-wizards-stage3.vercel.app";
 
 const Dashboard = () => {
   const { user, logout } = useAuth();
@@ -14,6 +14,11 @@ const Dashboard = () => {
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
 
+  const authHeaders = () => {
+    const token = localStorage.getItem("access_token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const fetchProfiles = async (pageNum = 1) => {
     setLoading(true);
     setError("");
@@ -22,16 +27,16 @@ const Dashboard = () => {
       if (search.trim()) {
         res = await axios.get(`${API_URL}/api/v1/profiles/search`, {
           params: { q: search, page: pageNum, limit: 10 },
-          withCredentials: true,
+          headers: authHeaders(),
         });
       } else {
         res = await axios.get(`${API_URL}/api/v1/profiles`, {
           params: { ...filters, page: pageNum, limit: 10 },
-          withCredentials: true,
+          headers: authHeaders(),
         });
       }
       setProfiles(res.data.data);
-      setPagination(res.data.pagination);
+      setPagination(res.data.metadata || {});
       setPage(pageNum);
     } catch (err) {
       setError(err.response?.data?.message || "Failed to fetch profiles");
@@ -48,7 +53,7 @@ const Dashboard = () => {
     try {
       const res = await axios.get(`${API_URL}/api/v1/profiles/export`, {
         params: filters,
-        withCredentials: true,
+        headers: authHeaders(),
         responseType: "blob",
       });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -164,7 +169,7 @@ const Dashboard = () => {
         <div style={styles.card}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
             <h3 style={{ margin: 0 }}>
-              Profiles {pagination.total ? `(${pagination.total} total)` : ""}
+              Profiles {pagination.total_count ? `(${pagination.total_count} total)` : ""}
             </h3>
             {loading && <span style={{ color: "#888" }}>Loading...</span>}
           </div>
@@ -213,8 +218,8 @@ const Dashboard = () => {
             <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "24px" }}>
               <button
                 onClick={() => fetchProfiles(page - 1)}
-                disabled={!pagination.has_prev}
-                style={{ ...styles.button, background: pagination.has_prev ? "#333" : "#222", color: pagination.has_prev ? "white" : "#555" }}
+                disabled={page <= 1}
+                style={{ ...styles.button, background: page > 1 ? "#333" : "#222", color: page > 1 ? "white" : "#555" }}
               >
                 ← Prev
               </button>
@@ -223,8 +228,8 @@ const Dashboard = () => {
               </span>
               <button
                 onClick={() => fetchProfiles(page + 1)}
-                disabled={!pagination.has_next}
-                style={{ ...styles.button, background: pagination.has_next ? "#333" : "#222", color: pagination.has_next ? "white" : "#555" }}
+                disabled={!pagination.has_more}
+                style={{ ...styles.button, background: pagination.has_more ? "#333" : "#222", color: pagination.has_more ? "white" : "#555" }}
               >
                 Next →
               </button>

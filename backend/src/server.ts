@@ -4,6 +4,7 @@ import { handle } from "hono/vercel";
 import { getProfiles } from "./routes/profiles";
 import { searchProfiles } from "./routes/search";
 import { exportProfiles } from "./routes/export";
+import { ingestCSV } from "./routes/ingest";
 import authRouter from "./routes/auth";
 import { authMiddleware } from "./middleware/auth";
 import { requireRole } from "./middleware/rbac";
@@ -80,6 +81,7 @@ app.get("/api/users/me", async (c) => {
 app.get("/api/v1/profiles", (c) => getProfiles(c));
 app.get("/api/v1/profiles/search", (c) => searchProfiles(c));
 app.get("/api/v1/profiles/export", requireRole("admin"), (c) => exportProfiles(c));
+app.post("/api/v1/profiles/import", requireRole("admin"), (c) => ingestCSV(c));
 
 // Backward-compat Stage 2 routes
 app.get("/api/profiles/search", (c) => searchProfiles(c));

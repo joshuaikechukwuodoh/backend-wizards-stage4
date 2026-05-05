@@ -59,7 +59,8 @@ program
       // But wait, the backend handles the GitHub callback and then redirects to redirect_to.
       // So we need to point the backend to our local server.
       
-      const authUrl = `http://localhost:3000/api/v1/auth/github?redirect_to=${encodeURIComponent(callbackUrl)}`;
+      const backendUrl = process.env.INSIGHTA_API_URL?.replace('/api/v1', '') || 'https://backend-wizards-stage3.vercel.app';
+      const authUrl = `${backendUrl}/auth/github?redirect_to=${encodeURIComponent(callbackUrl)}`;
       
       spinner.text = 'Opening browser for GitHub login...';
       await open(authUrl);

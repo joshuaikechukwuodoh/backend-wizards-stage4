@@ -11,19 +11,11 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
+      "src": "/api/v1/(.*)",
       "dest": "backend/src/server.ts"
     },
     {
-      "src": "/auth/github",
-      "dest": "backend/src/server.ts"
-    },
-    {
-      "src": "/auth/refresh",
-      "dest": "backend/src/server.ts"
-    },
-    {
-      "src": "/auth/logout",
+      "src": "/auth/(.*)",
       "dest": "backend/src/server.ts"
     },
     {
