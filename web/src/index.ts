@@ -127,7 +127,7 @@ app.get('/', (c) => {
         <div class="login-card">
             <h1>Insighta Labs+</h1>
             <p>Secure Access & Profile Intelligence</p>
-            <a href="${BACKEND_URL}/auth/github?redirect_to=${WEB_URL}/auth/web-callback" class="github-btn">
+            <a href="${BACKEND_URL}/auth/github?redirect_to=${WEB_URL}/login-success" class="github-btn">
                 Login with GitHub
             </a>
         </div>
@@ -136,7 +136,7 @@ app.get('/', (c) => {
   `);
 });
 
-app.get('/auth/web-callback', (c) => {
+app.get('/login-success', (c) => {
   const accessToken = c.req.query('access_token');
   const refreshToken = c.req.query('refresh_token');
 
