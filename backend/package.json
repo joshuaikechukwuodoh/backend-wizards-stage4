@@ -12,9 +12,9 @@
     "typescript": "^6.0.3"
   },
   "scripts": {
-    "dev": "bun run src/server.ts",
-    "start": "bun run src/server.ts",
-    "build": "echo 'No build step required'",
+    "dev": "node api.js && bun run src/server.ts",
+    "start": "node api.js && bun run src/server.ts",
+    "build": "node api.js && echo 'No build step required'",
     "seed": "bun run src/seed.ts",
     "db:push": "drizzle-kit push"
   },
